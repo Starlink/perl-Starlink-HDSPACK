@@ -45,7 +45,7 @@ use vars qw/ $VERSION @EXPORT_OK $DEBUG/;
 use constant SAI__OK => &NDF::SAI__OK;
 use constant SAI__ERROR => &NDF::SAI__ERROR;
 
-$VERSION = '2.0';
+$VERSION = '2.01';
 
 $DEBUG = 0;
 @EXPORT_OK = qw( copobj retrieve_locs delobj creobj setobj
@@ -83,7 +83,9 @@ sub create_hdsobj {
 
   $status = creobj( $path, $type, $dims, $status );
 
-  return _status_toperl( $status );
+  return _status_toperl( "create_hdsobj",
+                         "Error creating HDS object '$path' of type $type",
+                         $status );
 }
 
 =item B<set_hdsobj>
@@ -118,7 +120,9 @@ sub set_hdsobj {
 
   $status = setobj( $path, $value, $status );
 
-  return _status_toperl( $status );
+  return _status_toperl( "set_hdsobj",
+                         "Error setting HDS object '$path' to value '$value'",
+                         $status );
 }
 
 =item B<delete_hdsobj>
@@ -141,7 +145,9 @@ sub delete_hdsobj {
 
   $status = delobj( $path, $status );
 
-  return _status_toperl( $status );
+  return _status_toperl( "delete_hdsobj",
+                         "Error deleting '$path'",
+                         $status );
 }
 
 =item B<copy_hdsobj>
@@ -164,9 +170,43 @@ sub copy_hdsobj {
 
   $status = copobj( $src, $dest, $status );
 
-  return _status_toperl( $status );
+  return _status_toperl( "copy_hdsobj",
+                         "Error copying '$src' to '$dest'",
+                         $status );
 }
 
+=item B<error_handler>
+
+Allows a callback to be supplied that will be passed the function name
+and any error messages coming from the low level libraries. Use undef
+to reset to the standard behaviour (of ignoring).
+
+  Starlink::HDSPACK::error_handler( sub { my $app = shift; print STDERR $_."\n" for @_ } );
+
+Must be given a code ref.
+
+This routine is not exported but must be called with a full
+path.
+
+The error handler will not be called if there are no errors.
+
+=cut
+
+{
+  my $CB;
+  sub error_handler {
+    if (@_) {
+      my $cb = shift;
+      if (defined $CB) {
+        if (not ref $CB) {
+          croak "Error handler must be a coderef";
+        }
+      }
+      $CB = $cb;
+    }
+    return $CB;
+  }
+}
 
 =back
 
@@ -780,10 +820,13 @@ sub _split_path {
 }
 
 # Convert Starlink status to perl true/false
-# Input: Starlink status
+# Input: Calling sub name + caller error message + Starlink status
 # Output: 1 or 0
 # Annulls status and closes error context
+# Can call an error handler
 sub _status_toperl {
+  my $name = shift;
+  my $extra = shift;
   my $status = shift;
 
   # Check status return
@@ -791,8 +834,12 @@ sub _status_toperl {
   if ($status == SAI__OK) {
     $pstat = 1;
   } else {
-    # flush errors rather than annul them if DEBUG is set
-    if ($DEBUG) {
+    my $CB = error_handler();
+    if (defined $CB) {
+      my @errors = NDF::err_flush_to_string( $status );
+      $CB->( $name, @errors, (defined $extra ? $extra: () ) );
+    } elsif ($DEBUG) {
+      # flush errors rather than annul them if DEBUG is set
       err_flush($status);
     } else {
       err_annul($status);
@@ -834,6 +881,7 @@ Tim Jenness (t.jenness@jach.hawaii.edu)
 
 =head1 COPYRIGHT
 
+Copyright (C) 2011 Science and Technology Facilities Council.
 Copyright (C) 1999-2001,2003 Particle Physics and Astronomy Research Council.
 All Rights Reserved.
 
