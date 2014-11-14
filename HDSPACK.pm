@@ -339,10 +339,10 @@ sub copobj {
   # Find HDS locators to all the structures listed
   # The first structure in the array is the file locator.
   # the last locator in the array points to the requested structure/object
-  ($status, my @srclocs) = retrieve_locs($source, 'READ', $status);
   my @tarlocs;
   ($status, @tarlocs) = retrieve_locs($target, 'UPDATE', $status)
     if length($target) > 0;
+  ($status, my @srclocs) = retrieve_locs($source, 'READ', $status);
 
   # If tarlocs contains nothing and status is good, we have
   # to use HDS_COPY rather than DAT_COPY so that a top level container
